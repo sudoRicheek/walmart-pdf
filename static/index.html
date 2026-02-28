@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Walmart Order Splitter</title>
+<style>
+/* ── reset & base ───────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--card:#222632;--border:#2e3348;
+  --accent:#0071dc;--accent-hover:#0058ab;--text:#e4e6ed;--muted:#8b8fa3;
+  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
+  font-family:'Inter','Segoe UI',system-ui,sans-serif;
+}
+body{background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+button{cursor:pointer;font:inherit}
+
+/* ── layout ─────────────────────────────────────────────────── */
+.app{max-width:1200px;margin:0 auto;padding:24px 20px}
+header{display:flex;align-items:center;gap:16px;margin-bottom:28px;flex-wrap:wrap}
+header h1{font-size:1.5rem;font-weight:700;white-space:nowrap}
+header h1 span{color:var(--accent)}
+
+/* ── filter bar ─────────────────────────────────────────────── */
+.filters{
+  display:flex;gap:12px;flex-wrap:wrap;
+  background:var(--surface);padding:16px 20px;border-radius:12px;
+  border:1px solid var(--border);margin-bottom:24px;align-items:end
+}
+.filter-group{display:flex;flex-direction:column;gap:4px}
+.filter-group label{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.filter-group select,
+.filter-group input{
+  background:var(--card);color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;font-size:.875rem;min-width:150px
+}
+.filter-group select:focus,
+.filter-group input:focus{outline:none;border-color:var(--accent)}
+.btn{
+  padding:8px 20px;border-radius:8px;font-size:.875rem;font-weight:600;
+  border:none;transition:background .15s
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-hover)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+
+/* ── summary cards ──────────────────────────────────────────── */
+.summary-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px}
+.summary-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:20px;text-align:center
+}
+.summary-card .label{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.summary-card .value{font-size:1.75rem;font-weight:700}
+.summary-card .value.green{color:var(--green)}
+.summary-card .value.yellow{color:var(--yellow)}
+.summary-card .value.red{color:var(--red)}
+.summary-card .value.accent{color:var(--accent)}
+
+/* ── orders list ────────────────────────────────────────────── */
+.orders-section h2{font-size:1.1rem;font-weight:600;margin-bottom:12px;color:var(--muted)}
+.order-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  margin-bottom:12px;overflow:hidden;transition:border-color .15s
+}
+.order-card:hover{border-color:var(--accent)}
+.order-header{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:16px 20px;cursor:pointer;user-select:none;gap:12px;flex-wrap:wrap
+}
+.order-header:hover{background:rgba(255,255,255,.02)}
+.order-meta{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+.order-meta .chip{
+  font-size:.75rem;padding:3px 10px;border-radius:20px;
+  background:var(--card);border:1px solid var(--border)
+}
+.order-meta .chip.card-chip{color:var(--yellow)}
+.order-meta .order-num{font-weight:600;font-size:.95rem}
+.order-meta .order-date{color:var(--muted);font-size:.85rem}
+.order-subtotal{font-weight:700;font-size:1.1rem;white-space:nowrap}
+.chevron{transition:transform .2s;color:var(--muted);font-size:1.2rem}
+.order-card.open .chevron{transform:rotate(180deg)}
+
+/* ── items table ────────────────────────────────────────────── */
+.order-items{display:none;padding:0 20px 16px}
+.order-card.open .order-items{display:block}
+.items-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.items-table th{
+  text-align:left;padding:10px 8px;font-size:.7rem;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border)
+}
+.items-table td{padding:10px 8px;border-bottom:1px solid var(--border)}
+.items-table tr:last-child td{border-bottom:none}
+.items-table .product-name{max-width:350px}
+.items-table .price{font-weight:600;white-space:nowrap}
+.items-table .qty{text-align:center}
+.items-table .split-cell{text-align:center;width:100px}
+
+/* checkbox styling */
+.split-cb{display:flex;align-items:center;justify-content:center;gap:4px}
+.split-cb input[type="checkbox"]{
+  appearance:none;width:18px;height:18px;border:2px solid var(--border);
+  border-radius:4px;cursor:pointer;transition:all .15s;position:relative;
+  background:var(--card);flex-shrink:0
+}
+.split-cb input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+.split-cb input[type="checkbox"]:checked::after{
+  content:'✓';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:12px;color:#fff;font-weight:700
+}
+.split-amount{font-size:.7rem;color:var(--muted);min-width:45px;text-align:right}
+
+/* status chips */
+.status{font-size:.7rem;padding:2px 8px;border-radius:10px;white-space:nowrap}
+.status-shopped{background:rgba(52,211,153,.15);color:var(--green)}
+.status-substitutions{background:rgba(251,191,36,.15);color:var(--yellow)}
+.status-weight{background:rgba(96,165,250,.15);color:#60a5fa}
+.status-unavailable{background:rgba(248,113,113,.15);color:var(--red)}
+
+/* ── editable roommate names ────────────────────────────────── */
+.roommate-header{cursor:pointer;border-bottom:1px dashed var(--muted)}
+.roommate-header:hover{color:var(--accent)}
+
+/* ── responsive ─────────────────────────────────────────────── */
+@media(max-width:768px){
+  .filters{flex-direction:column}
+  .filter-group select,.filter-group input{min-width:100%}
+  .items-table{font-size:.75rem}
+  .order-meta{gap:8px}
+}
+
+/* ── loading / empty ────────────────────────────────────────── */
+.loading{text-align:center;padding:60px 0;color:var(--muted)}
+.empty{text-align:center;padding:40px;color:var(--muted);font-style:italic}
+
+/* ── order split totals row ─────────────────────────────────── */
+.order-split-totals{
+  display:flex;gap:16px;padding:12px 20px;
+  background:rgba(0,113,220,.06);border-top:1px solid var(--border);
+  flex-wrap:wrap
+}
+.order-split-totals .split-total-chip{
+  font-size:.8rem;padding:4px 12px;border-radius:8px;
+  background:var(--card);border:1px solid var(--border)
+}
+.order-split-totals .split-total-chip strong{color:var(--accent)}
+/* ── people panel ────────────────────────────────────────────── */
+.people-panel{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:14px 20px;margin-bottom:20px;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap
+}
+.people-panel-title{
+  font-size:.75rem;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;white-space:nowrap
+}
+.people-list{display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1}
+.person-chip{
+  display:flex;align-items:stretch;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  overflow:hidden;transition:border-color .15s
+}
+.person-chip:focus-within{border-color:var(--accent)}
+.person-chip input{
+  background:transparent;border:none;color:var(--text);font:inherit;
+  font-size:.875rem;padding:7px 10px;width:120px;outline:none;
+}
+.person-chip .rm-btn{
+  background:transparent;border:none;border-left:1px solid var(--border);
+  color:var(--muted);padding:0 10px;cursor:pointer;font-size:1.1rem;
+  line-height:1;transition:color .15s,background .15s;
+}
+.person-chip .rm-btn:hover{color:var(--red);background:rgba(248,113,113,.1)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- header -->
+  <header>
+    <h1>🛒 <span>Walmart</span> Order Splitter</h1>
+  </header>
+
+  <!-- people panel -->
+  <div class="people-panel">
+    <span class="people-panel-title">👥 People</span>
+    <div class="people-list" id="peopleList"></div>
+    <button class="btn btn-ghost" style="font-size:.8rem;padding:6px 14px;white-space:nowrap" onclick="addPerson()">+ Add Person</button>
+  </div>
+
+  <!-- filters -->
+  <div class="filters" id="filters">
+    <div class="filter-group">
+      <label>Credit Card</label>
+      <select id="filterCard"><option value="">All Cards</option></select>
+    </div>
+    <div class="filter-group">
+      <label>From</label>
+      <input type="date" id="filterFrom" />
+    </div>
+    <div class="filter-group">
+      <label>To</label>
+      <input type="date" id="filterTo" />
+    </div>
+    <button class="btn btn-primary" onclick="applyFilters()">Apply</button>
+    <button class="btn btn-ghost" onclick="clearFilters()">Clear</button>
+    <button class="btn btn-ghost" onclick="exportCSV()" style="margin-left:auto">⬇ Export CSV</button>
+  </div>
+
+  <!-- summary -->
+  <div class="summary-row" id="summaryRow"></div>
+
+  <!-- orders -->
+  <div class="orders-section">
+    <h2 id="ordersHeading">Orders</h2>
+    <div id="ordersList"></div>
+  </div>
+
+</div>
+
+<script>
+// ── state ──────────────────────────────────────────────────────────
+let ROOMMATES = [];
+let currentFilters = {};
+
+// ── helpers ────────────────────────────────────────────────────────
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const fmt = n => '$' + Number(n).toFixed(2);
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  return res.json();
+}
+
+function statusClass(s) {
+  if (!s) return '';
+  const l = s.toLowerCase();
+  if (l === 'shopped') return 'status-shopped';
+  if (l === 'substitutions') return 'status-substitutions';
+  if (l.includes('weight')) return 'status-weight';
+  if (l === 'unavailable') return 'status-unavailable';
+  return '';
+}
+
+function qs(params) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) { if (v) p.set(k, v); }
+  return p.toString() ? '?' + p.toString() : '';
+}
+
+// ── init ───────────────────────────────────────────────────────────
+async function init() {
+  const [cards, roommates] = await Promise.all([
+    api('/api/cards'),
+    api('/api/roommates'),
+  ]);
+  ROOMMATES = roommates;
+  renderPeoplePanel();
+
+  const sel = $('#filterCard');
+  cards.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = '•••• ' + c;
+    sel.appendChild(o);
+  });
+
+  await applyFilters();
+}
+
+// ── filters ────────────────────────────────────────────────────────
+async function applyFilters() {
+  currentFilters = {
+    card: $('#filterCard').value,
+    date_from: $('#filterFrom').value,
+    date_to: $('#filterTo').value,
+  };
+  await Promise.all([loadOrders(), loadSummary()]);
+}
+
+function clearFilters() {
+  $('#filterCard').value = '';
+  $('#filterFrom').value = '';
+  $('#filterTo').value = '';
+  applyFilters();
+}
+
+// ── export CSV ─────────────────────────────────────────────────────
+function exportCSV() {
+  const url = '/api/export/csv' + qs(currentFilters);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'walmart_splits.csv';
+  a.click();
+}
+
+// ── summary ────────────────────────────────────────────────────────
+async function loadSummary() {
+  const data = await api('/api/summary' + qs(currentFilters));
+  const colors = ['green', 'yellow', 'red'];
+  let html = '';
+  let i = 0;
+  for (const [name, total] of Object.entries(data.roommates)) {
+    html += `
+      <div class="summary-card">
+        <div class="label">${name}</div>
+        <div class="value ${colors[i % 3]}">${fmt(total)}</div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:4px">incl. ${fmt(data.tax_per_roommate)} tax/fees</div>
+      </div>`;
+    i++;
+  }
+  html += `
+    <div class="summary-card">
+      <div class="label">Grand Total</div>
+      <div class="value accent">${fmt(data.grand_total)}</div>
+    </div>`;
+  $('#summaryRow').innerHTML = html;
+}
+
+// ── orders ─────────────────────────────────────────────────────────
+async function loadOrders() {
+  const orders = await api('/api/orders' + qs(currentFilters));
+  const heading = $('#ordersHeading');
+  heading.textContent = `Orders (${orders.length})`;
+
+  if (!orders.length) {
+    $('#ordersList').innerHTML = '<div class="empty">No orders match the current filters.</div>';
+    return;
+  }
+
+  let html = '';
+  for (const o of orders) {
+    const dateStr = new Date(o.order_date + 'T00:00:00').toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric'
+    });
+    html += `
+      <div class="order-card" id="order-${o.id}">
+        <div class="order-header" onclick="toggleOrder(${o.id})">
+          <div class="order-meta">
+            <span class="order-num">#${o.order_number}</span>
+            <span class="order-date">${dateStr}</span>
+            <span class="chip card-chip">💳 ${o.payment_last4}</span>
+            <span class="chip">${o.item_count} items</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <span class="order-subtotal">${fmt(o.subtotal)}</span>
+            <span class="chevron">▼</span>
+          </div>
+        </div>
+        <div class="order-items" id="items-${o.id}"></div>
+        <div class="order-split-totals" id="totals-${o.id}" style="display:none"></div>
+      </div>`;
+  }
+  $('#ordersList').innerHTML = html;
+}
+
+// ── toggle order ───────────────────────────────────────────────────
+async function toggleOrder(orderId) {
+  const card = $(`#order-${orderId}`);
+  const isOpen = card.classList.toggle('open');
+  if (!isOpen) {
+    $(`#totals-${orderId}`).style.display = 'none';
+    return;
+  }
+
+  const container = $(`#items-${orderId}`);
+  container.innerHTML = '<div class="loading">Loading items…</div>';
+
+  const data = await api(`/api/orders/${orderId}/items`);
+  const orderCharges = (data.tax || 0) + (data.delivery_charges || 0);
+  renderItems(orderId, data.items, orderCharges);
+}
+
+function renderItems(orderId, items, orderCharges) {
+  const container = $(`#items-${orderId}`);
+  let html = '<table class="items-table"><thead><tr>';
+  html += '<th>Product</th><th>Qty</th><th>Price</th><th>Status</th>';
+  ROOMMATES.forEach(r => {
+    html += `<th class="split-cell"><span class="roommate-header" title="Click to rename">${r}</span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  for (const item of items) {
+    const checkedCount = ROOMMATES.filter(r => item.splits[r]).length;
+    const perPerson = checkedCount > 0 ? item.price / checkedCount : 0;
+
+    html += `<tr>`;
+    html += `<td class="product-name">${item.product_name}</td>`;
+    html += `<td class="qty">${item.quantity}</td>`;
+    html += `<td class="price">${fmt(item.price)}</td>`;
+    html += `<td><span class="status ${statusClass(item.delivery_status)}">${item.delivery_status}</span></td>`;
+
+    ROOMMATES.forEach(r => {
+      const checked = item.splits[r] ? 'checked' : '';
+      const amt = item.splits[r] ? fmt(perPerson) : '—';
+      html += `<td class="split-cell">
+        <div class="split-cb">
+          <input type="checkbox" ${checked}
+                 onchange="toggleSplit(${orderId}, ${item.id}, '${r.replace(/'/g,"\\'")}', this.checked)" />
+          <span class="split-amount" id="amt-${item.id}-${r.replace(/\s/g,'_')}">${amt}</span>
+        </div>
+      </td>`;
+    });
+    html += '</tr>';
+  }
+
+  // Tax / delivery charges row (always split equally)
+  if (orderCharges > 0) {
+    const taxShare = orderCharges / ROOMMATES.length;
+    html += `<tr style="background:rgba(251,191,36,.05)">`;
+    html += `<td class="product-name" style="color:var(--yellow)">Tax &amp; Fees</td>`;
+    html += `<td></td><td class="price" style="color:var(--yellow)">${fmt(orderCharges)}</td><td></td>`;
+    ROOMMATES.forEach(() => {
+      html += `<td class="split-cell"><span style="font-size:.8rem;color:var(--yellow)">${fmt(taxShare)}</span></td>`;
+    });
+    html += '</tr>';
+  }
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+
+  updateOrderTotals(orderId, items, orderCharges);
+}
+
+// ── toggle split ───────────────────────────────────────────────────
+async function toggleSplit(orderId, itemId, roommate, checked) {
+  await api(`/api/splits/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roommate, checked }),
+  });
+
+  // Reload items for this order to recalc amounts
+  const data = await api(`/api/orders/${orderId}/items`);
+  const orderCharges = (data.tax || 0) + (data.delivery_charges || 0);
+  renderItems(orderId, data.items, orderCharges);
+  loadSummary();
+}
+
+// ── per-order split totals ─────────────────────────────────────────
+function updateOrderTotals(orderId, items, orderCharges) {
+  const totals = {};
+  ROOMMATES.forEach(r => { totals[r] = 0; });
+
+  for (const item of items) {
+    const checkedCount = ROOMMATES.filter(r => item.splits[r]).length;
+    if (checkedCount === 0) continue;
+    const share = item.price / checkedCount;
+    ROOMMATES.forEach(r => {
+      if (item.splits[r]) totals[r] += share;
+    });
+  }
+
+  // Add tax/fees split equally
+  const taxShare = (orderCharges || 0) / ROOMMATES.length;
+  ROOMMATES.forEach(r => { totals[r] += taxShare; });
+
+  const container = $(`#totals-${orderId}`);
+  let html = '<strong style="font-size:.8rem;color:var(--muted);margin-right:8px">Split (incl. tax):</strong>';
+  ROOMMATES.forEach(r => {
+    html += `<span class="split-total-chip">${r}: <strong>${fmt(totals[r])}</strong></span>`;
+  });
+  container.innerHTML = html;
+  container.style.display = 'flex';
+}
+// ── people management ──────────────────────────────────────────────────
+function renderPeoplePanel() {
+  const list = $('#peopleList');
+  let html = '';
+  ROOMMATES.forEach(name => {
+    const safe = name.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    const safeJs = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    html += `
+      <div class="person-chip">
+        <input type="text" value="${safe}"
+               data-original="${safe}"
+               onblur="renamePerson(this)"
+               onkeydown="if(event.key==='Enter'){this.blur();event.preventDefault()}" />
+        <button class="rm-btn" onclick="removePerson('${safeJs}')" title="Remove">&#x2715;</button>
+      </div>`;
+  });
+  list.innerHTML = html;
+}
+
+async function renamePerson(input) {
+  const newName = input.value.trim();
+  const oldName = input.dataset.original;
+  if (!newName || newName === oldName) { input.value = oldName; return; }
+  const data = await api('/api/roommates', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({old_name: oldName, new_name: newName}),
+  });
+  if (data.ok) {
+    ROOMMATES = data.roommates;
+    renderPeoplePanel();
+    await Promise.all([loadSummary(), refreshOpenOrders()]);
+  } else {
+    input.value = oldName;
+  }
+}
+
+async function addPerson() {
+  const name = `Person ${ROOMMATES.length + 1}`;
+  const data = await api('/api/roommates', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name}),
+  });
+  if (data.ok) {
+    ROOMMATES = data.roommates;
+    renderPeoplePanel();
+    // Focus the new chip's input for immediate rename
+    const inputs = $$('#peopleList input');
+    if (inputs.length) { inputs[inputs.length - 1].select(); }
+    await Promise.all([loadSummary(), refreshOpenOrders()]);
+  }
+}
+
+async function removePerson(name) {
+  if (ROOMMATES.length <= 1) { alert('You need at least one person.'); return; }
+  if (!confirm(`Remove "${name}" from all splits?`)) return;
+  const data = await api(`/api/roommates/${encodeURIComponent(name)}`, {method: 'DELETE'});
+  if (data.ok) {
+    ROOMMATES = data.roommates;
+    renderPeoplePanel();
+    await Promise.all([loadSummary(), refreshOpenOrders()]);
+  }
+}
+
+async function refreshOpenOrders() {
+  const openCards = document.querySelectorAll('.order-card.open');
+  for (const card of openCards) {
+    const orderId = parseInt(card.id.replace('order-', ''));
+    const data = await api(`/api/orders/${orderId}/items`);
+    const orderCharges = (data.tax || 0) + (data.delivery_charges || 0);
+    renderItems(orderId, data.items, orderCharges);
+  }
+}
+// ── boot ───────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
